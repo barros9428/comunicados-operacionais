@@ -1,0 +1,51 @@
+PARAFRASEADOR DE TEXTOS V3 — INSTRUÇÕES
+
+O QUE CONTÉM
+- index.html, style.css, app.js: interface para GitHub Pages.
+- worker/worker.js: intermediário de IA para Cloudflare Workers.
+- worker/wrangler.toml.example: exemplo de configuração.
+
+PASSO 1 — SITE
+No repositório https://github.com/barros9428/comunicados-operacionais
+substitua index.html e envie também style.css e app.js na raiz do repositório.
+Confirme em Commit changes. O endereço público permanece:
+https://barros9428.github.io/comunicados-operacionais/
+
+PASSO 2 — IA (necessário para paráfrases inteligentes)
+1. Crie uma chave de API do Gemini no Google AI Studio. Confira os termos,
+   a disponibilidade do plano gratuito e a política de privacidade vigentes.
+2. Crie um Cloudflare Worker usando worker/worker.js (pode usar o editor do painel).
+3. Nas configurações do Worker, crie o SECRET GEMINI_API_KEY com a chave do Gemini.
+   Nunca coloque a chave no HTML, JavaScript público, repositório ou campo do site.
+4. Configure as VARIABLES:
+   ALLOWED_ORIGIN = https://barros9428.github.io
+   GEMINI_MODEL = gemini-2.5-flash-lite
+   (Verifique se o modelo continua disponível na sua conta.)
+5. Faça Deploy. Copie a URL HTTPS do Worker, por exemplo
+   https://parafraseador-v3-api.SEUSUBDOMINIO.workers.dev
+6. No site, toque em Configurar IA, cole a URL do Worker e salve.
+7. Para cada texto que desejar enviar à IA, marque o consentimento.
+
+IMPORTANTE SOBRE SEGURANÇA E GRATUIDADE
+- O Worker oculta a chave, mas a URL pública pode ser abusada por terceiros.
+- Restringir CORS à origem do GitHub Pages reduz chamadas comuns de navegadores,
+  MAS NÃO autentica usuários e não impede requisições diretas de outros clientes.
+- Antes de divulgar o site amplamente, configure proteção contra abuso
+  (por exemplo, Cloudflare Turnstile validado no Worker e/ou limites de requisição).
+- O plano gratuito do Gemini e do Workers tem limites e pode mudar.
+- Textos enviados ao Gemini ficam sujeitos às políticas do provedor; não envie
+  dados sigilosos sem avaliar essas condições.
+- O histórico fica no armazenamento do navegador (não sincroniza entre aparelhos).
+- O modo local é BÁSICO: não promete gramática completa nem 3 paráfrases diferentes.
+- O reconhecimento de voz depende do navegador e pode depender de serviço externo.
+- Os textos gerados por IA podem conter erros: revise fatos, nomes, números e horários.
+
+TESTES SUGERIDOS
+1. Sem IA: 'amanha vai ter reuniao as 5 da tarde por favor todos comparecer'
+   Deve gerar revisão básica e aviso de modo básico.
+2. Com IA: gerar 3 versões distintas e copiar cada uma.
+3. Simular erro da API e confirmar fallback com aviso.
+4. Testar dicionário, histórico, favoritos, backup, revisão e microfone no Android.
+
+OBS.: Este pacote é o código-fonte pronto para publicação, não significa que a
+integração Gemini/Cloudflare já esteja configurada ou testada na sua conta.

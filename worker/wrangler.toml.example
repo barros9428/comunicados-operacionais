@@ -1,0 +1,7 @@
+name = "parafraseador-v3-api"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://barros9428.github.io"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
