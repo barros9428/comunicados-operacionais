@@ -34,7 +34,7 @@ const grammarRules=[
 
 [/\bcom todos os operadores\b/gi,'com todos os operadores'],
 [/\bseje\b/gi,'seja'],[/\bmenas\b/gi,'menos'],[/\bconcerteza\b/gi,'com certeza'],
-[/\bexcessão\b/gi,'exceção'],[/\bprevilégio\b/gi,'privilégio'],[/\batravez\b/gi,'através']
+[/\bdeica\b/gi,'deixa'],[/\bdeicha\b/gi,'deixa'],[/\bconcerteza\b/gi,'com certeza'],[/\bexcessão\b/gi,'exceção'],[/\bprevilégio\b/gi,'privilégio'],[/\batravez\b/gi,'através']
 ];
 const formalRules=[
 [/\b(?:eu vou precisar|vou precisar)\b/gi,'será necessário'],
@@ -91,10 +91,54 @@ function polishPunctuation(text){
 }
 function normalize(t){return baseFix(t).replace(/\s{2,}/g,' ').replace(/\s+([,.!?;:])/g,'$1').replace(/([.!?])\s*([a-záàâãéêíóôõúç])/g,(_,a,b)=>a+' '+b.toUpperCase())}
 function protect(text){const dict=get('dictionary',[]).filter(x=>typeof x==='string'&&x.trim()).sort((a,b)=>b.length-a.length);let s=text;const saved=[];for(const phrase of dict){const at=s.toLowerCase().indexOf(phrase.toLowerCase());if(at>=0){const token='ZZPROTEGIDO'+saved.length+'ZZ';saved.push(s.slice(at,at+phrase.length));s=s.slice(0,at)+token+s.slice(at+phrase.length)}}return {text:s,restore:t=>t.replace(/ZZPROTEGIDO(\d+)ZZ/g,(_,i)=>saved[Number(i)]??'')}}
+// Motor local: corrige erros comuns e reformula construções reconhecidas.
+// Não tenta inventar significados quando a frase é ambígua.
+function rewriteKnownPhrases(s,kind){
+ const formal=kind==='formal'||kind==='cordial'||kind==='operacional'||kind==='detalhado';
+ const objective=kind==='objetivo'||kind==='simples'||kind==='whatsapp';
+ if(formal){
+  s=applyRules(s,[
+   [/\bdeixa isso para\b/gi,'deixe isso para'],
+   [/\bdeixa (isso|essa|esse|esta|este)\b/gi,'deixe $1'],
+   [/\bme manda\b/gi,'envie-me'],
+   [/\bme fala\b/gi,'informe-me'],
+   [/\bme diz\b/gi,'informe-me'],
+   [/\bpreciso que você\b/gi,'solicito que você'],
+   [/\bquero saber\b/gi,'gostaria de saber'],
+   [/\bvou falar com\b/gi,'conversarei com'],
+   [/\bme ajuda\b/gi,'ajude-me'],
+   [/\btem como\b/gi,'seria possível'],
+   [/\bvai começar\b/gi,'terá início'],
+   [/\bvai terminar\b/gi,'será concluído'],
+   [/\bavisar todo mundo\b/gi,'comunicar a todos'],
+   [/\ba gente precisa\b/gi,'precisamos'],
+   [/\bnão dá para\b/gi,'não é possível'],
+   [/\bficar de olho\b/gi,'acompanhar'],
+   [/\bdar uma olhada\b/gi,'verificar']
+  ]);
+ }
+ if(objective){
+  s=applyRules(s,[
+   [/\b(?:eu )?vou precisar de\b/gi,'Preciso de'],
+   [/\b(?:eu )?vou precisar\b/gi,'Preciso'],
+   [/\b(?:eu )?gostaria de pedir\b/gi,'Peço'],
+   [/\b(?:eu )?gostaria de saber\b/gi,'Quero saber'],
+   [/\b(?:eu )?gostaria de informar que\b/gi,'Informo que'],
+   [/\b(?:eu )?quero que você\b/gi,'Peço que você'],
+   [/\b(?:eu )?estou entrando em contato para\b/gi,'Entro em contato para'],
+   [/\b(?:por gentileza|por favor)\s*,?\s*/gi,''],
+   [/\b(?:no dia de amanhã)\b/gi,'amanhã'],
+   [/\b(?:neste momento)\b/gi,'agora']
+  ]);
+ }
+ return s;
+}
 function localRewrite(source,kind,instruction=''){
  const safe=protect(source);
  let s=applyRules(safe.text,grammarRules);
- // Primeiro aplica padrões completos: regras curtas não devem destruir o contexto.
+ // Pontuação de vocativos reconhecíveis, sem mudar o conteúdo.
+ s=s.replace(/^(amor|amiga?|querida?|pessoal|gente)\s+(?=(?:seu|sua|por favor|preciso|me|deixa|você)\b)/i,'$1, ');
+ s=s.replace(/\b(seu idiota|sua idiota)\s+(?=(?:deixa|pare|para|faz|faça)\b)/gi,'$1, ');
  if(kind==='formal'||kind==='cordial'||kind==='operacional'||kind==='detalhado'){
    s=applyRules(s,formalPhrases);
    s=applyRules(s,formalRules);
@@ -103,6 +147,7 @@ function localRewrite(source,kind,instruction=''){
    s=applyRules(s,objectivePhrases);
    s=applyRules(s,conciseRules);
  }
+ s=rewriteKnownPhrases(s,kind);
  if(kind==='cordial'&&!/\b(?:por favor|por gentileza)\b/i.test(s))s='Por gentileza, '+s.charAt(0).toLowerCase()+s.slice(1);
  if(kind==='operacional')s='Comunicado: '+s.charAt(0).toLowerCase()+s.slice(1);
  if(kind==='formal'&&$('tone').value==='respeitoso'&&!/\b(?:por favor|por gentileza)\b/i.test(s))s='Por gentileza, '+s.charAt(0).toLowerCase()+s.slice(1);
@@ -117,7 +162,7 @@ function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':
 function wordDiff(original,changed){let a=new Set(original.toLowerCase().match(/[\p{L}\p{N}]+/gu)||[]);return changed.split(/(\s+)/).map(w=>{let k=w.toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');return k&&!a.has(k)?'<mark>'+escapeHtml(w)+'</mark>':escapeHtml(w)}).join('')}
 function render(){const box=$('resultCards');box.innerHTML='';for(const [key,value] of Object.entries(results)){const card=document.createElement('article');card.className='result';card.innerHTML='<div class="resultHead"><strong>'+escapeHtml(names[key]||key)+'</strong><span class="muted">Editável</span></div><textarea aria-label="Texto '+escapeHtml(key)+'"></textarea><div class="diff" hidden></div><div class="resultActions"><button data-act="copy">📋 Copiar</button><button data-act="share">↗ Compartilhar</button><button data-act="diff">Comparar</button><button data-act="undo">↶ Desfazer</button><button data-act="select">Usar esta versão</button></div>';const ta=card.querySelector('textarea');ta.value=value;ta.addEventListener('input',()=>{results[key]=ta.value});card.querySelectorAll('button').forEach(b=>b.addEventListener('click',async()=>{const act=b.dataset.act;if(act==='copy'){await copyText(ta.value)}else if(act==='share'){if(navigator.share){try{await navigator.share({text:ta.value})}catch(e){if(e.name!=='AbortError')notify('Não foi possível compartilhar.',true)}}else window.open('https://wa.me/?text='+encodeURIComponent(ta.value),'_blank','noopener')}else if(act==='diff'){let el=card.querySelector('.diff');el.hidden=!el.hidden;if(!el.hidden)el.innerHTML='<strong>Palavras novas destacadas:</strong><p>'+wordDiff(lastSource,ta.value)+'</p>'}else if(act==='undo'){ta.value=previous[key]??value;results[key]=ta.value}else{selected=key;notify('Versão selecionada: '+(names[key]||key),false,true)}}));box.appendChild(card)}if(!Object.keys(results).length)box.innerHTML='<div class="empty">Suas três versões aparecerão aqui.</div>'}
 async function copyText(text){try{await navigator.clipboard.writeText(text);notify('Texto copiado!',false,true)}catch{notify('Não foi possível copiar automaticamente. Selecione e copie o texto.',true)}}
-function detectWarnings(input,outputs){const out=[];if(/\b(?:amanh[aã]|hoje|ontem)\b/i.test(input)&&/\b(?:\d{1,2})(?:h|:\d{2})?\b/.test(input)===false)out.push('Confira se há um horário que precisa ser informado.');if(/\b(?:às|as)\s*\d{1,2}(?!\s*(?:h|:|horas|da tarde|da manhã|da noite))\b/i.test(input))out.push('Horário ambíguo: confirme se é manhã ou tarde.');const originalNumbers=(input.match(/\d+(?:[.,:]\d+)*/g)||[]).sort().join('|');for(const v of Object.values(outputs)){const numbers=(v.match(/\d+(?:[.,:]\d+)*/g)||[]).sort().join('|');if(numbers!==originalNumbers){out.push('Confira os números e horários: a reescrita pode ter alterado a forma de apresentação.');break}}return [...new Set(out)]}
+function detectWarnings(input,outputs){const out=[];if(/\b(?:coisar|coisa|trem|negócio)\b/i.test(input))out.push('Há palavras vagas no texto (como “coisar”). Confirme o significado antes de compartilhar.');if(/\b(?:amanh[aã]|hoje|ontem)\b/i.test(input)&&/\b(?:\d{1,2})(?:h|:\d{2})?\b/.test(input)===false)out.push('Confira se há um horário que precisa ser informado.');if(/\b(?:às|as)\s*\d{1,2}(?!\s*(?:h|:|horas|da tarde|da manhã|da noite))\b/i.test(input))out.push('Horário ambíguo: confirme se é manhã ou tarde.');const originalNumbers=(input.match(/\d+(?:[.,:]\d+)*/g)||[]).sort().join('|');for(const v of Object.values(outputs)){const numbers=(v.match(/\d+(?:[.,:]\d+)*/g)||[]).sort().join('|');if(numbers!==originalNumbers){out.push('Confira os números e horários: a reescrita pode ter alterado a forma de apresentação.');break}}return [...new Set(out)]}
 function showWarnings(w){$('warnings').hidden=!w.length;$('warnings').textContent=w.join('\n')}
 async function generate(keys=styles,instruction=''){
  const source=$('source').value.trim();if(!source){notify('Digite ou fale um texto antes de gerar.',true);$('source').focus();return}
@@ -128,9 +173,9 @@ async function generate(keys=styles,instruction=''){
  render();
  const warnings=detectWarnings(source,results);
  if(keys.length===3&&new Set([results.corrigido,results.formal,results.objetivo]).size===1){
-   warnings.unshift('Este texto não corresponde a regras de paráfrase disponíveis. Sem IA, as três versões podem coincidir. Edite manualmente ou use frases mais diretas.');
+   warnings.unshift('Não foi possível criar três paráfrases distintas com segurança. As regras locais não compreendem todas as frases.');
  }
- showWarnings(warnings);$('mode').textContent='✓ Revisão local';notify('Texto revisado sem IA. Confira as três versões e edite se necessário.',false,true);
+ showWarnings(warnings);$('mode').textContent='✓ Revisão local';notify('Revisão local concluída. Confira a pontuação e o significado antes de compartilhar.',false,true);
  }catch(e){notify('Não foi possível revisar o texto: '+e.message,true)}finally{busy=false;$('generate').disabled=false;$('generate').textContent='✦ Gerar 3 versões'}
 }
 function showHistory(){const h=get('history',[]);$('history').innerHTML='';if(!h.length){$('history').textContent='Nenhum texto salvo.';return}for(const entry of h){const item=document.createElement('div');item.className='historyItem';const p=document.createElement('div');p.className='preview';p.textContent=(entry.favorite?'★ ':'')+new Date(entry.date).toLocaleString('pt-BR')+' — '+entry.source;item.appendChild(p);const group=document.createElement('div');group.className='tools';[['Abrir',()=>{ $('source').value=entry.source;lastSource=entry.source;results={...entry.results};previous={...results};render();$('count').textContent=entry.source.length+' caracteres';window.scrollTo({top:0,behavior:'smooth'})}],[(entry.favorite?'★':'☆'),()=>{entry.favorite=!entry.favorite;put('history',h);showHistory()}],['Excluir',()=>{put('history',h.filter(x=>x.id!==entry.id));showHistory()}]].forEach(([t,fn])=>{const b=document.createElement('button');b.textContent=t;b.addEventListener('click',fn);group.appendChild(b)});item.appendChild(group);$('history').appendChild(item)}}
