@@ -8,15 +8,80 @@ const styles=['corrigido','formal','objetivo'];
 function notify(msg,error=false,good=false){$('status').textContent=msg;$('status').className='notice'+(error?' error':good?' good':'')}
 function clean(t){return t.replace(/\s+/g,' ').trim()}
 function baseFix(input){let s=clean(input);if(!s)return '';s=s.replace(/\s+([,.!?;:])/g,'$1').replace(/([,.!?;:])(?=\S)/g,'$1 ').replace(/\b(amanha|reuniao|nao|tambem|voce|sera|ate|informacao|situacao|previsao|horario|manutencao|agua|ja|esta|estao|possivel|atencao)\b/gi,m=>({amanha:'amanhã',reuniao:'reunião',nao:'não',tambem:'também',voce:'você',sera:'será',ate:'até',informacao:'informação',situacao:'situação',previsao:'previsão',horario:'horário',manutencao:'manutenção',agua:'água',ja:'já',esta:'está',estao:'estão',possivel:'possível',atencao:'atenção'})[m.toLowerCase()]||m);s=s.replace(/\b(\d{1,2})\s*(?:horas?|h)\s*(?:da|de)\s*tarde\b/gi,(_,h)=>String((Number(h)%12)+12)+'h').replace(/\b(\d{1,2})\s*(?:horas?|h)\s*(?:da|de)\s*manh[aã]\b/gi,(_,h)=>Number(h)+'h');s=s.replace(/\b(\d{1,2}):\s*(\d{2})\b/g,(_,h,m)=>Number(h)+'h'+(m==='00'?'':m));s=s[0].toUpperCase()+s.slice(1);if(!/[.!?]$/.test(s))s+='.';return s}
-function fallback(t){const c=baseFix(t);return {corrigido:c,formal:c,objetivo:c}}
+function applyRules(text,rules){let s=text;for(const [pattern,replacement] of rules)s=s.replace(pattern,replacement);return s}
+const grammarRules=[
+[/\bagente\b/gi,'a gente'],[/\bcomcerteza\b/gi,'com certeza'],[/\bderrepente\b/gi,'de repente'],
+[/\bconcerteza\b/gi,'com certeza'],[/\bporisso\b/gi,'por isso'],[/\bapartir de\b/gi,'a partir de'],
+[/\bpra\b/gi,'para'],[/\bpro\b/gi,'para o'],[/\bpros\b/gi,'para os'],
+[/\bta\b/gi,'está'],[/\btá\b/gi,'está'],[/\bto\b/gi,'estou'],[/\btô\b/gi,'estou'],
+[/\bvc\b/gi,'você'],[/\bvcs\b/gi,'vocês'],[/\bqdo\b/gi,'quando'],[/\bpq\b/gi,'porque'],
+[/\bmais\s+(?=(?:eu|você|ele|ela|nós|eles|isso|não|hoje|amanhã)\b)/gi,'mas '],
+[/\b(?:vai|vão)\s+ter\s+(?=(?:uma?|reuniões|problemas|mudanças|avisos)\b)/gi,'haverá '],
+[/\bprecisar de uma reunião\b/gi,'precisar reunir'],
+[/\bcom todos os operadores\b/gi,'com todos os operadores'],
+[/\bseje\b/gi,'seja'],[/\bmenas\b/gi,'menos'],[/\bconcerteza\b/gi,'com certeza'],
+[/\bexcessão\b/gi,'exceção'],[/\bprevilégio\b/gi,'privilégio'],[/\batravez\b/gi,'através']
+];
+const formalRules=[
+[/\b(?:eu vou precisar|vou precisar)\b/gi,'será necessário'],
+[/\b(?:eu quero|quero)\b/gi,'solicito'],
+[/\b(?:a gente vai|nós vamos)\b/gi,'iremos'],
+[/\b(?:vai ter)\b/gi,'haverá'],
+[/\b(?:tem que)\b/gi,'é necessário'],
+[/\b(?:precisa)\b/gi,'é necessário'],
+[/\b(?:me avisa|me avise)\b/gi,'por gentileza, informe-me'],
+[/\b(?:tá bom|tudo bem)\b/gi,'de acordo'],
+[/\b(?:obrigado pela ajuda)\b/gi,'agradeço pela colaboração'],
+[/\b(?:pessoal)\b/gi,'Prezados'],
+[/\b(?:olá)\b/gi,'Prezados'],
+[/\b(?:falar sobre)\b/gi,'tratar de'],
+[/\b(?:pedir)\b/gi,'solicitar']
+];
+const conciseRules=[
+[/\b(?:gostaria de informar que)\b/gi,'Informo que'],
+[/\b(?:venho por meio desta informar que)\b/gi,'Informo que'],
+[/\b(?:eu vou precisar de)\b/gi,'Preciso de'],
+[/\b(?:eu vou precisar)\b/gi,'Preciso'],
+[/\b(?:eu gostaria de)\b/gi,'Quero'],
+[/\b(?:por gentileza|por favor)\b/gi,''],
+[/\b(?:com o objetivo de)\b/gi,'para'],
+[/\b(?:no dia de amanhã)\b/gi,'amanhã'],
+[/\b(?:neste momento)\b/gi,'agora'],
+[/\b(?:todos os operadores)\b/gi,'os operadores'],
+[/\b(?:é necessário que)\b/gi,''],
+[/\b(?:eu quero)\b/gi,'Quero']
+];
+function normalize(t){return baseFix(t).replace(/\s{2,}/g,' ').replace(/\s+([,.!?;:])/g,'$1').replace(/([.!?])\s*([a-záàâãéêíóôõúç])/g,(_,a,b)=>a+' '+b.toUpperCase())}
+function protect(text){const dict=get('dictionary',[]).filter(x=>typeof x==='string'&&x.trim()).sort((a,b)=>b.length-a.length);let s=text;const saved=[];for(const phrase of dict){const at=s.toLowerCase().indexOf(phrase.toLowerCase());if(at>=0){const token='ZZPROTEGIDO'+saved.length+'ZZ';saved.push(s.slice(at,at+phrase.length));s=s.slice(0,at)+token+s.slice(at+phrase.length)}}return {text:s,restore:t=>t.replace(/ZZPROTEGIDO(\d+)ZZ/g,(_,i)=>saved[Number(i)]??'')}}
+function localRewrite(source,kind,instruction=''){
+ const safe=protect(source);let s=applyRules(safe.text,grammarRules);
+ if(kind==='formal'||kind==='cordial'||kind==='operacional')s=applyRules(s,formalRules);
+ if(kind==='objetivo'||kind==='simples'||kind==='whatsapp')s=applyRules(s,conciseRules);
+ if(kind==='cordial')s=/\b(?:por favor|por gentileza)\b/i.test(s)?s:'Por gentileza, '+s.charAt(0).toLowerCase()+s.slice(1);
+ if(kind==='operacional')s='Comunicado: '+s.charAt(0).toLowerCase()+s.slice(1);
+ if(kind==='detalhado')s=applyRules(s,formalRules);
+ if(kind==='formal'&&$('tone').value==='respeitoso'&&!/\b(?:por favor|por gentileza)\b/i.test(s))s='Por gentileza, '+s.charAt(0).toLowerCase()+s.slice(1);
+ if(instruction&&/\b(?:curto|resum|diret|objetiv)\b/i.test(instruction))s=applyRules(s,conciseRules);
+ s=safe.restore(s);s=normalize(s);
+ if($('length').value==='curto'&&kind!=='corrigido')s=normalize(applyRules(s,conciseRules));
+ return s;
+}
+function fallback(t){return {corrigido:localRewrite(t,'corrigido'),formal:localRewrite(t,'formal'),objetivo:localRewrite(t,'objetivo')}}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function wordDiff(original,changed){let a=new Set(original.toLowerCase().match(/[\p{L}\p{N}]+/gu)||[]);return changed.split(/(\s+)/).map(w=>{let k=w.toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');return k&&!a.has(k)?'<mark>'+escapeHtml(w)+'</mark>':escapeHtml(w)}).join('')}
 function render(){const box=$('resultCards');box.innerHTML='';for(const [key,value] of Object.entries(results)){const card=document.createElement('article');card.className='result';card.innerHTML='<div class="resultHead"><strong>'+escapeHtml(names[key]||key)+'</strong><span class="muted">Editável</span></div><textarea aria-label="Texto '+escapeHtml(key)+'"></textarea><div class="diff" hidden></div><div class="resultActions"><button data-act="copy">📋 Copiar</button><button data-act="share">↗ Compartilhar</button><button data-act="diff">Comparar</button><button data-act="undo">↶ Desfazer</button><button data-act="select">Usar esta versão</button></div>';const ta=card.querySelector('textarea');ta.value=value;ta.addEventListener('input',()=>{results[key]=ta.value});card.querySelectorAll('button').forEach(b=>b.addEventListener('click',async()=>{const act=b.dataset.act;if(act==='copy'){await copyText(ta.value)}else if(act==='share'){if(navigator.share){try{await navigator.share({text:ta.value})}catch(e){if(e.name!=='AbortError')notify('Não foi possível compartilhar.',true)}}else window.open('https://wa.me/?text='+encodeURIComponent(ta.value),'_blank','noopener')}else if(act==='diff'){let el=card.querySelector('.diff');el.hidden=!el.hidden;if(!el.hidden)el.innerHTML='<strong>Palavras novas destacadas:</strong><p>'+wordDiff(lastSource,ta.value)+'</p>'}else if(act==='undo'){ta.value=previous[key]??value;results[key]=ta.value}else{selected=key;notify('Versão selecionada: '+(names[key]||key),false,true)}}));box.appendChild(card)}if(!Object.keys(results).length)box.innerHTML='<div class="empty">Suas três versões aparecerão aqui.</div>'}
 async function copyText(text){try{await navigator.clipboard.writeText(text);notify('Texto copiado!',false,true)}catch{notify('Não foi possível copiar automaticamente. Selecione e copie o texto.',true)}}
 function detectWarnings(input,outputs){const out=[];if(/\b(?:amanh[aã]|hoje|ontem)\b/i.test(input)&&/\b(?:\d{1,2})(?:h|:\d{2})?\b/.test(input)===false)out.push('Confira se há um horário que precisa ser informado.');if(/\b(?:às|as)\s*\d{1,2}(?!\s*(?:h|:|horas|da tarde|da manhã|da noite))\b/i.test(input))out.push('Horário ambíguo: confirme se é manhã ou tarde.');const originalNumbers=(input.match(/\d+(?:[.,:]\d+)*/g)||[]).sort().join('|');for(const v of Object.values(outputs)){const numbers=(v.match(/\d+(?:[.,:]\d+)*/g)||[]).sort().join('|');if(numbers!==originalNumbers){out.push('Confira os números e horários: a reescrita pode ter alterado a forma de apresentação.');break}}return [...new Set(out)]}
 function showWarnings(w){$('warnings').hidden=!w.length;$('warnings').textContent=w.join('\n')}
-async function askAI(payload){const url=get('worker','');if(!url)throw Error('IA não configurada');const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),25000);try{const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});const body=await res.json().catch(()=>({}));if(!res.ok)throw Error(body.error||'Erro no serviço de IA ('+res.status+')');if(!body.versions||typeof body.versions!=='object')throw Error('Resposta da IA inválida');return body}finally{clearTimeout(timer)}}
-async function generate(keys=styles,instruction=''){const source=$('source').value.trim();if(!source){notify('Digite ou fale um texto antes de gerar.',true);$('source').focus();return}if(source.length>5000){notify('Limite de 5.000 caracteres por solicitação.',true);return}if(busy)return;busy=true;$('generate').disabled=true;$('generate').textContent='⏳ Gerando...';lastSource=source;let requested=keys;try{let output,ai=false;if($('privacy').checked&&get('worker','')){const data=await askAI({text:source,styles:requested,length:$('length').value,tone:$('tone').value,recipient:$('recipient').value,dictionary:get('dictionary',[]),instruction,reference:instruction?(results[selected]||''):''});output=data.versions;explanations=Array.isArray(data.explanations)?data.explanations:[];ai=true}else{if(instruction||requested.some(k=>!styles.includes(k)))throw Error('Estilo avançado exige IA configurada e consentimento.');output=fallback(source);explanations=['Modo básico: apenas ajustes limitados de espaçamento, pontuação, acentos frequentes e horários.'];}previous={...results};if(requested.length===3)results={};for(const k of requested){if(typeof output[k]!=='string'||!output[k].trim())throw Error('A IA não devolveu o estilo '+k);results[k]=output[k].trim()}render();showWarnings(detectWarnings(source,results));$('mode').textContent=ai?'✨ Gerado com IA':'⚙ Modo básico';notify(ai?'Três versões geradas com IA. Confira nomes, horários e fatos.':'Modo básico aplicado. Para paráfrases completas, configure a IA.',false,true)}catch(e){const msg=e.name==='AbortError'?'Tempo de resposta esgotado.':e.message;notify('Não foi possível gerar com IA: '+msg,true);if(requested.length===3){previous={...results};results=fallback(source);explanations=['Modo de reserva: revisão simples, sem reescrita inteligente.'];render();showWarnings(detectWarnings(source,results));$('mode').textContent='⚙ Reserva básica';notify('IA indisponível: modo básico exibido. '+msg,true)}}finally{busy=false;$('generate').disabled=false;$('generate').textContent='✦ Gerar 3 versões'}}
+async function generate(keys=styles,instruction=''){
+ const source=$('source').value.trim();if(!source){notify('Digite ou fale um texto antes de gerar.',true);$('source').focus();return}
+ if(source.length>5000){notify('Limite de 5.000 caracteres.',true);return}
+ if(busy)return;busy=true;$('generate').disabled=true;$('generate').textContent='⏳ Revisando...';lastSource=source;
+ try{previous={...results};if(keys.length===3)results={};for(const k of keys)results[k]=localRewrite(source,k,instruction);
+ explanations=['Revisão local por regras de ortografia, pontuação e substituições frequentes.','A versão formal emprega substituições mais profissionais; a objetiva reduz expressões comuns.','Esta ferramenta não compreende o contexto como uma IA: confira o resultado antes de usar.'];
+ render();showWarnings(detectWarnings(source,results));$('mode').textContent='✓ Revisão local';notify('Texto revisado sem IA. Confira as três versões e edite se necessário.',false,true);
+ }catch(e){notify('Não foi possível revisar o texto: '+e.message,true)}finally{busy=false;$('generate').disabled=false;$('generate').textContent='✦ Gerar 3 versões'}
+}
 function showHistory(){const h=get('history',[]);$('history').innerHTML='';if(!h.length){$('history').textContent='Nenhum texto salvo.';return}for(const entry of h){const item=document.createElement('div');item.className='historyItem';const p=document.createElement('div');p.className='preview';p.textContent=(entry.favorite?'★ ':'')+new Date(entry.date).toLocaleString('pt-BR')+' — '+entry.source;item.appendChild(p);const group=document.createElement('div');group.className='tools';[['Abrir',()=>{ $('source').value=entry.source;lastSource=entry.source;results={...entry.results};previous={...results};render();$('count').textContent=entry.source.length+' caracteres';window.scrollTo({top:0,behavior:'smooth'})}],[(entry.favorite?'★':'☆'),()=>{entry.favorite=!entry.favorite;put('history',h);showHistory()}],['Excluir',()=>{put('history',h.filter(x=>x.id!==entry.id));showHistory()}]].forEach(([t,fn])=>{const b=document.createElement('button');b.textContent=t;b.addEventListener('click',fn);group.appendChild(b)});item.appendChild(group);$('history').appendChild(item)}}
 $('source').addEventListener('input',()=>{$('count').textContent=$('source').value.length+' caracteres'});
 $('generate').addEventListener('click',()=>generate());$('clearBtn').addEventListener('click',()=>{$('source').value='';$('count').textContent='0 caracteres';$('source').focus()});
@@ -26,7 +91,6 @@ $('saveBtn').addEventListener('click',()=>{if(!lastSource||!Object.keys(results)
 $('deleteAll').addEventListener('click',()=>{if(confirm('Apagar todo o histórico salvo neste navegador?')){put('history',[]);showHistory()}});
 $('exportBtn').addEventListener('click',()=>{const data={version:3,history:get('history',[]),dictionary:get('dictionary',[])};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='parafraseador-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
 $('importFile').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.history)||data.history.length>1000)throw Error('Backup inválido');const valid=data.history.filter(x=>typeof x.source==='string'&&x.source.length<=5000&&x.results&&typeof x.results==='object').slice(0,100);if(!confirm('Importar '+valid.length+' registros? Isso substituirá seu histórico.'))return;put('history',valid);if(Array.isArray(data.dictionary))put('dictionary',data.dictionary.filter(x=>typeof x==='string').slice(0,100));showHistory();notify('Backup importado.',false,true)}catch{notify('Não foi possível importar o arquivo.',true)}finally{e.target.value=''}});
-$('settingsBtn').addEventListener('click',()=>{$('workerUrl').value=get('worker','');$('settingsDialog').showModal()});$('saveSettings').addEventListener('click',e=>{const url=$('workerUrl').value.trim();if(url&&!/^https:\/\/[\w.-]+(?:\/[^\s]*)?$/.test(url)){e.preventDefault();notify('Informe uma URL HTTPS válida.',true);return}put('worker',url);notify(url?'Servidor de IA configurado. Marque o consentimento para usar.':'Servidor removido. Modo básico disponível.',false,true)});
 $('dictBtn').addEventListener('click',()=>{$('dictionary').value=get('dictionary',[]).join('\n');$('dictDialog').showModal()});$('saveDict').addEventListener('click',()=>{put('dictionary',$('dictionary').value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,100));notify('Dicionário salvo.',false,true)});
 $('micBtn').addEventListener('click',()=>{const Rec=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Rec)return notify('Reconhecimento de voz indisponível. Use o microfone do teclado do celular.',true);if(speech){speech.stop();return}speech=new Rec();speech.lang='pt-BR';speech.continuous=true;speech.interimResults=true;let committed=$('source').value.trim();let finalized='';speech.onresult=e=>{let partial='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)finalized+=' '+t;else partial+=' '+t} $('source').value=[committed,finalized.trim(),partial.trim()].filter(Boolean).join(' ').trim();$('count').textContent=$('source').value.length+' caracteres'};speech.onerror=e=>{if(e.error!=='aborted')notify('Microfone: '+e.error+'. Você pode usar o teclado de voz.',true)};speech.onend=()=>{speech=null;$('micBtn').textContent='🎙️ Falar';notify('Ditado finalizado. Confira a transcrição antes de gerar.')};try{speech.start();$('micBtn').textContent='⏹ Parar';notify('Ouvindo... toque em Parar quando terminar.')}catch{speech=null;notify('Não foi possível iniciar o microfone.',true)}});
 showHistory();
